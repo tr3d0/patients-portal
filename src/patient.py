@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from config import GENDERS, WARD_NUMBERS, ROOM_NUMBERS, API_CONTROLLER_URL
+from doctor import Doctor
 import requests
 
 # TODO: Implement the Patient class.
@@ -24,13 +25,14 @@ import requests
 class Patient:
     """A class to represent a patient."""
 
-    def __init__(self, name: str, age: int, gender: str, ward: int | None = None, room: int | None = None):
+    def __init__(self, name: str, age: int, gender: str, ward: int | None = None, room: int | None = None, doctor_name: str | None = None):
         """
         Initialize the Patient object.
         Args:
             name (str): The name of the patient.
             age (int): The age of the patient.
             gender (str): The gender of the patient.
+            doctor_name (str, optional): The name of the assigned doctor. Defaults to None.
         """
         if not isinstance(age, int) or age <= 0:
             raise ValueError("Age must be a positive integer.")
@@ -45,9 +47,24 @@ class Patient:
         self.gender = gender
         self.ward: int | None = None  # Initialize to None
         self.room: int | None = None  # Initialize to None
+        self.doctor_name: str | None = None # Initialize to None
 
         if ward is not None and room is not None:
             self.setroom_andward(ward, room)
+        
+        if doctor_name:
+            self.assign_doctor(doctor_name)
+
+    def assign_doctor(self, doctor_name: str) -> None:
+        """
+        Assigns a doctor to the patient with validation.
+        Args:
+            doctor_name (str): The name of the doctor.
+        Raises:
+            ValueError: If the doctor's name is not recognized.
+        """
+        validated_doctor = Doctor(doctor_name) # This will raise ValueError if invalid
+        self.doctor_name = validated_doctor.name
 
     def setroom_andward(self, ward: int, room: int) -> None:
         """
@@ -83,6 +100,7 @@ class Patient:
             "checkout": self.checkout,
             "ward": self.ward,
             "room": self.room,
+            "doctor_name": self.doctor_name,
         }
 
     def commit_to_db(self) -> requests.Response:

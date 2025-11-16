@@ -3,8 +3,8 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from patient_db import PatientDB
-from patient import Patient
-from config import GENDERS, WARD_NUMBERS, ROOM_NUMBERS
+from patient import Patient, Doctor
+from config import GENDERS, WARD_NUMBERS, ROOM_NUMBERS, DOCTORS
 
 class PatientAPIController:
     def __init__(self):
@@ -33,6 +33,9 @@ class PatientAPIController:
         self.app.route("/patients/<id>/checkout", methods=["PUT"])(
             self.checkout_patient_api
         )
+        self.app.route("/doctors", methods=["GET"])(self.get_doctors)
+        self.app.route("/patients/<id>/doctor", methods=["PUT"])(self.assign_doctor)
+
 
     def index(self):
         """
@@ -46,6 +49,12 @@ class PatientAPIController:
         """
         patients = self.patient_db.select_all_patients()
         return jsonify(patients), 200
+
+    def get_doctors(self):
+        """
+        Retrieves the list of available doctors.
+        """
+        return jsonify({"doctors": DOCTORS}), 200
 
     def get_patient(self, id):
         """
@@ -66,7 +75,7 @@ class PatientAPIController:
         if not request_body:
             return jsonify({"message": "Request body cannot be empty"}), 400
 
-        required_fields = ["name", "gender", "age"]
+        required_fields = ["name", "gender", "age", "ward", "room", "doctor_name"]
         if not all(key in request_body for key in required_fields):
             return (
                 jsonify(
@@ -78,6 +87,7 @@ class PatientAPIController:
         name = request_body["name"]
         gender = request_body["gender"]
         age = request_body["age"]
+
 
         # --- Enhanced Validation ---
         if not isinstance(name, str) or not name.strip():
@@ -99,6 +109,7 @@ class PatientAPIController:
         
         ward = request_body.get("ward")
         room = request_body.get("room")
+        doctor_name = request_body.get("doctor_name")
 
         # Optional validation for ward and room if they are provided
         if ward is not None and room is not None:
@@ -106,9 +117,16 @@ class PatientAPIController:
                 return jsonify({"message": "Invalid ward or room number"}), 400
         elif ward is not None or room is not None:
             return jsonify({"message": "Both ward and room must be provided together"}), 400
+        
+        # Optional validation for doctor
+        if doctor_name:
+            try:
+                Doctor(doctor_name) # Use Doctor class for validation
+            except ValueError as e:
+                return jsonify({"message": str(e)}), 400
 
 
-        new_patient = Patient(name=name, gender=gender, age=age, ward=ward, room=room)
+        new_patient = Patient(name=name, gender=gender, age=age, ward=ward, room=room, doctor_name=doctor_name)
         patient_data = new_patient.to_dict()
 
         # Insert the patient data into the database
@@ -150,9 +168,15 @@ class PatientAPIController:
         ):
             return jsonify({"message": "Age must be a positive integer"}), 400
         # --- End of Validation ---
+        
+        if "doctor_name" in update_data:
+            try:
+                Doctor(update_data["doctor_name"]) # Validate doctor name
+            except ValueError as e:
+                return jsonify({"message": str(e)}), 400
 
         allowed_updates = {
-            k: v for k, v in update_data.items() if k in ["name", "age", "gender", "room", "ward"]
+            k: v for k, v in update_data.items() if k in ["name", "age", "gender", "room", "ward", "doctor_name"]
         }
 
         if not allowed_updates:
@@ -255,6 +279,31 @@ class PatientAPIController:
         if rows_affected is not None and rows_affected > 0:
             return jsonify({"message": "Patient checked out successfully", "checkout_time": patient_obj.checkout}), 200
         return jsonify({"message": "Failed to checkout patient"}), 500
+
+    def assign_doctor(self, id):
+        """
+        Assigns a doctor to a patient.
+        Expects a JSON body with 'doctor_name'.
+        """
+        request_body = request.get_json()
+        if not request_body or "doctor_name" not in request_body:
+            return jsonify({"message": "Missing required field: doctor_name"}), 400
+
+        doctor_name = request_body["doctor_name"]
+
+        try:
+            Doctor(doctor_name) # Validate doctor name
+        except ValueError as e:
+            return jsonify({"message": str(e)}), 400
+
+        rows_affected = self.patient_db.update_patient(id, {"doctor_name": doctor_name})
+
+        if rows_affected is not None and rows_affected > 0:
+            updated_patient = self.patient_db.select_patient(id)
+            return jsonify(updated_patient), 200
+        elif self.patient_db.select_patient(id) is None:
+            return jsonify({"message": "Patient not found"}), 404
+        return jsonify({"message": "Error assigning doctor"}), 500
     def run(self):
         """
         Runs the Flask application.

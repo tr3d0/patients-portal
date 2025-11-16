@@ -42,6 +42,7 @@ PATIENTS_TABLE = Table(
     Column(CHECKOUT_COLUMN, String),
     Column(WARD_COLUMN, Integer),
     Column(ROOM_COLUMN, Integer),
+    Column("doctor_name", String),
 )
 
 METADATA.create_all(ENGINE)
